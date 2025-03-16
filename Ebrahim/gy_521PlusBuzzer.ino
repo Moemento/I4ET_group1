@@ -1,5 +1,3 @@
-//Written by Ahmet Burkay KIRNIK
-//Measurement of Angle with MPU-6050(GY-521)
 
 #include<Wire.h>  // this imports the Wire library, which allows the Arduino to communicate over I2C 
 
