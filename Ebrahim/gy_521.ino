@@ -1,5 +1,5 @@
-//Written by Ahmet Burkay KIRNIK
-//Measurement of Angle with MPU-6050(GY-521)
+// I used this website to set up the sensore 
+// https://projecthub.arduino.cc/Nicholas_N/how-to-use-the-accelerometer-gyroscope-gy-521-647e65
 
 #include<Wire.h>  // this imports the Wire library, which allows the Arduino to communicate over I2C 
 
