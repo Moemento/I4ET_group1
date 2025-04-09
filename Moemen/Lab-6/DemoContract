@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: Unlicensed
+pragma solidity 0.8.18;
+
+contract DemoContract {
+
+    address public owner;
+
+    struct Receivers {
+        string name;
+        uint256 tokens;
+    }
+
+    // Mapping of user address to receiver struct
+    mapping(address => Receivers) public users;
+
+    // Modifier to restrict certain functions to the contract owner
+    modifier onlyOwner(){
+        require(msg.sender == owner, "Only owner can call this.");
+        _;
+    }
+
+    // Constructor: sets the owner and gives them 100 tokens
+    constructor(){
+        owner = msg.sender;
+        users[owner].tokens = 100;
+    }
+
+    // A simple pure function to return double of an input
+    function double(uint _value) public pure returns (uint){
+        return _value * 2;
+    }
+
+    // Register a user with a name
+    function register(string memory _name) public {
+        users[msg.sender].name = _name;
+    }
+
+    // Transfer tokens from owner to a specified address (admin only)
+    function giveToken(address _receiver, uint256 _amount) public onlyOwner {
+        require(users[owner].tokens >= _amount, "Not enough tokens to give.");
+        users[owner].tokens -= _amount;
+        users[_receiver].tokens += _amount;
+    }
+
+    // ✅ NEW FUNCTION: Buy tokens with Ether
+    function buyToken() public payable {
+        uint256 tokenPrice = 2 ether;
+        require(msg.value >= tokenPrice, "Insufficient Ether sent. Token costs 2 Ether.");
+
+        // Calculate how many tokens user wants to buy
+        uint256 tokensToBuy = msg.value / tokenPrice;
+
+        // Check if the owner has enough tokens to sell
+        require(users[owner].tokens >= tokensToBuy, "Owner does not have enough tokens.");
+
+        // Transfer tokens from owner to buyer
+        users[owner].tokens -= tokensToBuy;
+        users[msg.sender].tokens += tokensToBuy;
+    }
+
+    // ✅ NEW FUNCTION: Check contract's Ether balance
+    function getContractBalance() public view returns (uint256) {
+        return address(this).balance;
+    }
+
+    // Optional: Allow owner to withdraw Ether from contract
+    function withdraw() public onlyOwner {
+        payable(owner).transfer(address(this).balance);
+    }
+}
