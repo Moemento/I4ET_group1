@@ -1,0 +1,128 @@
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.5.0 <0.8.0; // This sets the compatible Solidity compiler version range
+
+// Declare the contract
+contract factory {
+
+    // A constant to define how many digits our product ID should have
+    uint idDigits = 16;
+
+    // This will help us limit the random ID to 16 digits (10^16)
+    uint idModulus = 10 ** idDigits;
+
+    // Define a product with two properties: a name and an ID
+    struct Product {
+        string name;
+        uint id;
+    }
+
+    // An array to store all created products, marked as public so other contracts or apps can read from it
+    Product[] public products;
+
+    // Event that gets triggered when a new product is created
+    event NewProduct(uint indexed ArrayProductId, string name, uint id);
+
+    // Mapping to track who owns which product: product ID => owner's address
+    mapping(uint => address) public productToOwner;
+
+    // Mapping to track how many products each owner has: address => product count
+    mapping(address => uint) public ownerProductCount;
+
+    // === Private function to create a new product ===
+    // Only callable from inside the contract
+    function createProduct(string memory _name, uint _id) private {
+        // Create a new product in memory
+        Product memory newProduct = Product({
+            name: _name,
+            id: _id
+        });
+
+        // Add the new product to the array
+        products.push(newProduct);
+
+        // Get the index of the newly added product
+        uint productId = products.length - 1;
+
+        // Trigger the event to notify that a new product has been created
+        emit NewProduct(productId, _name, _id);
+    }
+
+    // === Private function to generate a pseudo-random ID ===
+    // Uses a string to produce a "random" number
+    function _generateRandomId(string memory _str) private view returns (uint) {
+        // Hash the input string, convert to uint, and limit it to 16 digits
+        uint rand = uint(keccak256(abi.encodePacked(_str))) % idModulus;
+        return rand;
+    }
+
+    // === Public function to create a product with a random ID ===
+    function createRandomProduct(string memory _name) public {
+        // Generate a random ID based on the product name
+        uint randId = _generateRandomId(_name);
+
+        // Create the product with the random ID
+        createProduct(_name, randId);
+    }
+
+    // === Public function to claim ownership of a product ===
+    // Each product can be assigned to an owner (msg.sender)
+    function Ownership(uint productId) public {
+        // Make sure the product ID is valid (not out of range)
+        require(productId < products.length, "Product does not exist.");
+
+        // Ensure the caller is not already the owner
+        require(productToOwner[productId] != msg.sender, "You already own this product.");
+
+        // Optional: store the previous owner (for bookkeeping)
+        address previousOwner = productToOwner[productId];
+
+        // Assign ownership of the product to the caller
+        productToOwner[productId] = msg.sender;
+
+        // Increase the count of products owned by this address
+        ownerProductCount[msg.sender]++;
+
+        // If the product had a previous owner (not address(0)), decrease their count
+        if (previousOwner != address(0)) {
+            ownerProductCount[previousOwner]--;
+        }
+    }
+
+    // === External view function to get all product IDs owned by a specific address ===
+    function getProductsByOwner(address _owner) external view returns (uint[] memory) {
+        // Create a counter for tracking how many products the owner has
+        uint counter = 0;
+
+        // Create a temporary array to hold the result
+        uint[] memory result = new uint[](ownerProductCount[_owner]);
+
+        // Loop through all products in the array
+        for (uint i = 0; i < products.length; i++) {
+            // If the product is owned by the provided address
+            if (productToOwner[i] == _owner) {
+                // Add the product's index (ID) to the result array
+                result[counter] = i;
+                counter++;
+            }
+        }
+
+        // Return the array of product IDs
+        return result;
+    }
+
+    // === Exercise 13 ===
+    // Mapping to store users' ages: user ID => age
+    mapping(uint => uint) public age;
+
+    // Modifier to check if a user's age is >= a specified age
+    modifier olderThan(uint _age, uint _userId) {
+        // Require that the user's age meets the requirement
+        require(age[_userId] >= _age, "User is not old enough.");
+        _; // This means "run the rest of the function"
+    }
+
+    // Function that checks if a user is an adult (18+), using the modifier
+    function validationUsers(uint _userId) public view olderThan(18, _userId) {
+        // Function body intentionally left empty (as per instructions)
+    }
+}
