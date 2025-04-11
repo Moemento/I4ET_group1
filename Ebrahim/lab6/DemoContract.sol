@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.5.0 <0.8.0;
+
+contract DemoContract {
+    address public owner;
+    uint public tokenPrice = 2 ether;
+
+    struct Receiver {
+        string name;
+        uint tokens;
+    }
+
+    mapping(address => Receiver) public users;
+
+    // Track owner token balance
+    uint public ownerTokenBalance;
+
+     // Only owner modifier
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not the contract owner");
+        _;
+    }
+
+    constructor(uint initialSupply) public {
+        owner = msg.sender;
+        ownerTokenBalance = initialSupply;
+    }
+
+    function registerUser(string memory _name) public {
+        users[msg.sender] = Receiver(_name, 0);
+    }
+    
+    function getPrice(uint _amount) public view returns (uint) {
+    return _amount * tokenPrice;
+    }
+
+    // returns the value in ether for readability (not in real use)
+    function getPriceInEther(uint _amount) public view returns (uint) {
+        return (_amount * tokenPrice) / 1 ether;
+    }
+
+
+    // Buy tokens by sending Ether (1 token = 2 Ether)
+    function buyToken(uint _amount) public payable {
+        require(bytes(users[msg.sender].name).length > 0, "User not registered");
+        require(msg.value >= _amount * tokenPrice, "Not enough Ether sent");
+        require(ownerTokenBalance >= _amount, "Not enough tokens available");
+
+        users[msg.sender].tokens += _amount;
+        ownerTokenBalance -= _amount;
+    }
+
+    // Get contract's ETH balance
+    function getContractBalance() public view returns (uint) {
+        return address(this).balance;
+    }
+
+  
+
+    function giveToken(address _receiver, uint256 _amount) public onlyOwner {
+        require(users[owner].tokens >= _amount, "Not enough tokens");
+         users[owner].tokens -= _amount;
+        //ownerTokenBalance -= _amount;
+        users[_receiver].tokens += _amount;
+    } 
+
+
+    // Allow Ether to be received
+    function() external payable {}
+}
