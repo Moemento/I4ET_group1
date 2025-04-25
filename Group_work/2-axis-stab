@@ -1,0 +1,63 @@
+#include <Wire.h>
+#include <Servo.h>
+#include <MPU6050.h>
+
+MPU6050 mpu;
+Servo servoPitch;
+Servo servoRoll;
+
+const int servoPitchPin = 9;  // Up/Down
+const int servoRollPin = 10;  // Left/Right
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+  mpu.initialize();
+
+  if (!mpu.testConnection()) {
+    Serial.println("MPU6050 connection failed");
+    while (1);
+  }
+
+  servoPitch.attach(servoPitchPin);
+  servoRoll.attach(servoRollPin);
+  delay(100);  // Let sensor settle
+}
+
+void loop() {
+  float pitch = getPitch();  // from X-axis
+  float roll = getRoll();    // from Y-axis
+
+  // Map pitch and roll to servo angles (center = 90)
+  float pitchAngle = 90 + pitch;
+  float rollAngle = 90 - roll;
+
+  pitchAngle = constrain(pitchAngle, 0, 180);
+  rollAngle = constrain(rollAngle, 0, 180);
+
+  servoPitch.write(pitchAngle);
+  servoRoll.write(rollAngle);
+
+  Serial.print("Pitch: ");
+  Serial.print(pitch, 1);
+  Serial.print(" | Roll: ");
+  Serial.print(roll, 1);
+  Serial.print(" | Servo P: ");
+  Serial.print(pitchAngle);
+  Serial.print(" | Servo R: ");
+  Serial.println(rollAngle);
+
+  delay(50);
+}
+
+float getPitch() {
+  int16_t ax, ay, az;
+  mpu.getAcceleration(&ax, &ay, &az);
+  return atan2(ax, sqrt(ay * ay + az * az)) * 180.0 / PI;
+}
+
+float getRoll() {
+  int16_t ax, ay, az;
+  mpu.getAcceleration(&ax, &ay, &az);
+  return atan2(ay, sqrt(ax * ax + az * az)) * 180.0 / PI;
+}
