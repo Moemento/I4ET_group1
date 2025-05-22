@@ -7,8 +7,8 @@ MPU6050 mpu;
 Servo servoPitch;
 Servo servoRoll;
 
-int pitchServoPin = D6;
-int rollServoPin = D5;
+int pitchServoPin = D9;
+int rollServoPin = D10;
 
 // PID variables for pitch
 float pitchKp = 5.0, pitchKi = 0.05, pitchKd = 1.5;
