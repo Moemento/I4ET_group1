@@ -1,0 +1,168 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning}
+
+% Define colors for code
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{backcolour}{rgb}{0.97,0.97,0.97}
+\definecolor{keywordcolor}{rgb}{0.25,0.35,0.75}
+\definecolor{stringcolor}{rgb}{0.6,0.3,0.1}
+
+% Listings style
+\lstdefinestyle{solstyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegray}\itshape,
+    keywordstyle=\color{keywordcolor}\bfseries,
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{stringcolor},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showstringspaces=false,
+    tabsize=2,
+    language=Java
+}
+
+% TikZ setup
+\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm,text centered, draw=black, fill=gray!10]
+\tikzstyle{process} = [rectangle, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=blue!10]
+\tikzstyle{decision} = [diamond, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=green!10]
+\tikzstyle{arrow} = [thick,->,>=stealth]
+
+\title{Smart Contract Module for Mission Control}
+
+
+\begin{document}
+
+\maketitle
+
+\section{Smart Contract Development}
+
+\subsection{System Architecture Diagram}
+
+\begin{center}
+\begin{tikzpicture}[node distance=1.5cm]
+\node (start) [startstop] {User Account (Admin/Operator)};
+\node (checkRole) [decision, below of=start] {Is Admin?};
+\node (assign) [process, right of=checkRole, xshift=4cm] {Assign Role};
+\node (isOperator) [decision, below of=checkRole, yshift=-1cm] {Is Operator?};
+\node (quotaCheck) [process, below of=isOperator, yshift=-1cm] {Check Usage Quota};
+\node (log) [process, below of=quotaCheck] {Log Mission};
+\node (reject) [startstop, right of=quotaCheck, xshift=4cm] {Reject Transaction};
+\node (end) [startstop, below of=log] {Emit Event \\ Update State};
+
+\draw [arrow] (start) -- (checkRole);
+\draw [arrow] (checkRole) -- node[anchor=south] {Yes} (assign);
+\draw [arrow] (checkRole) -- node[anchor=west] {No} (isOperator);
+\draw [arrow] (isOperator) -- node[anchor=west] {Yes} (quotaCheck);
+\draw [arrow] (quotaCheck) -- (log);
+\draw [arrow] (log) -- (end);
+\draw [arrow] (isOperator.east) -- ++(2,0) node[midway, above] {No} -- (reject);
+\draw [arrow] (quotaCheck.east) -- ++(2,0) node[midway, above] {Limit Exceeded} -- (reject);
+\end{tikzpicture}
+\end{center}
+
+\subsection{Motivation and Purpose}
+
+To enhance system accountability and operational control, a smart contract was developed to manage permissions, log missions, and enforce usage limits for the self-stabilizing platform. The contract is designed for use in mission-critical maritime applications such as missile launching or firefighting, where equipment must be tightly controlled and every action transparently recorded.
+
+\subsection{Development Environment and Tools}
+
+The contract was implemented in \texttt{Solidity} and tested using the \texttt{Remix IDE}, a browser-based Ethereum development environment. All transactions and logic execution were validated using the \texttt{Remix VM (Prague)} local test blockchain.
+
+\subsection{Design Approach}
+
+The smart contract \texttt{PlatformManager} was developed iteratively, with each layer of functionality building upon the previous one. It includes:
+
+\begin{enumerate}
+    \item \textbf{Role-based Access Control}
+    \item \textbf{Mission Logging with Metadata}
+    \item \textbf{Daily Usage Quota Enforcement}
+\end{enumerate}
+
+Each of these stages is discussed with selected code examples below.
+
+\subsection{Role-Based Access Control}
+
+\begin{lstlisting}[style=solstyle, caption={Role definition and storage}]
+enum Role { None, Operator, Admin }
+mapping(address => Role) public roles;
+
+modifier onlyAdmin() {
+    require(roles[msg.sender] == Role.Admin, "Not admin");
+    _;
+}
+\end{lstlisting}
+
+\begin{lstlisting}[style=solstyle, caption={Assigning roles}]
+function assignRole(address _user, Role _role) external onlyAdmin {
+    roles[_user] = _role;
+    emit RoleAssigned(_user, _role);
+}
+\end{lstlisting}
+
+\subsection{Mission Logging and Event Emission}
+
+\begin{lstlisting}[style=solstyle, caption={Mission structure}]
+struct Mission {
+    address operator;
+    string deviceType;
+    uint timestamp;
+    string missionType;
+    bool success;
+}
+Mission[] public missions;
+\end{lstlisting}
+
+\begin{lstlisting}[style=solstyle, caption={Logging a mission}]
+function logMission(
+    string memory _deviceType,
+    string memory _missionType,
+    bool _success
+) external onlyOperator checkUsageLimit {
+    missions.push(Mission(msg.sender, _deviceType, block.timestamp, _missionType, _success));
+    emit MissionLogged(msg.sender, _deviceType, _missionType, _success);
+}
+\end{lstlisting}
+
+\subsection{Usage Quota Enforcement}
+
+\begin{lstlisting}[style=solstyle, caption={Usage tracking state variables}]
+mapping(address => uint) public dailyUsage;
+mapping(address => uint) public lastUsageDay;
+\end{lstlisting}
+
+\begin{lstlisting}[style=solstyle, caption={Daily quota enforcement}]
+modifier checkUsageLimit() {
+    if (block.timestamp / 1 days > lastUsageDay[msg.sender]) {
+        dailyUsage[msg.sender] = 0;
+        lastUsageDay[msg.sender] = block.timestamp / 1 days;
+    }
+    require(dailyUsage[msg.sender] < 5, "Usage limit exceeded");
+    _;
+    dailyUsage[msg.sender]++;
+}
+\end{lstlisting}
+
+\subsection{Testing and Validation}
+
+\begin{enumerate}
+    \item Assigned the Operator role to a test account from the Admin account.
+    \item Logged five missions with valid parameters from the Operator account.
+    \item Verified that the sixth attempt was rejected due to quota limits.
+    \item Retrieved mission logs via \texttt{getMissions()} and confirmed correctness.
+\end{enumerate}
+
+\subsection{Impact and Applicability}
+
+The use of blockchain technology ensures that all mission operations are immutable, verifiable, and traceable in a decentralized environment. This model is particularly well suited for defense, safety, or logistics applications where trust, transparency, and limited authority are essential.
+
+\end{document}
