@@ -1,0 +1,222 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning}
+
+% Define colors for code
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{backcolour}{rgb}{0.97,0.97,0.97}
+\definecolor{keywordcolor}{rgb}{0.25,0.35,0.75}
+\definecolor{stringcolor}{rgb}{0.6,0.3,0.1}
+
+% Listings style
+\lstdefinestyle{solstyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegray}\itshape,
+    keywordstyle=\color{keywordcolor}\bfseries,
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{stringcolor},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showstringspaces=false,
+    tabsize=2,
+    language=Java
+}
+
+% TikZ setup
+\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm,text centered, draw=black, fill=gray!10]
+\tikzstyle{process} = [rectangle, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=blue!10]
+\tikzstyle{decision} = [diamond, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=green!10]
+\tikzstyle{arrow} = [thick,->,>=stealth]
+
+\title{Smart Contract Module for Mission Control}
+
+\begin{document}
+
+\maketitle
+
+\section{Smart Contract Development}
+
+\subsection{Understanding the Code for New Readers}
+
+Smart contracts are self-executing programs stored on a blockchain. They automatically enforce the rules and logic defined within them. This smart contract is written in Solidity, the most common language for writing Ethereum smart contracts.
+
+For someone unfamiliar with Solidity or blockchain, think of a smart contract as a public record that stores rules and tracks actions. Instead of trusting a person or organization, trust is placed in the code, which cannot be changed once deployed.
+
+The smart contract described in this document helps manage a stabilizing platform by tracking who is allowed to log activity (Operators), ensuring no user can log more than a certain number of actions per day, and permanently storing mission logs on the blockchain.
+
+The key building blocks used in this contract are:
+\begin{itemize}
+  \item \textbf{Enum:} A list of named values. Here it's used to define roles (Admin, Operator).
+  \item \textbf{Struct:} A data structure that holds multiple values under one name. Here it's used to define a mission log.
+  \item \textbf{Mapping:} Like a dictionary in other languages, it maps addresses (user IDs) to data (such as role or usage count).
+  \item \textbf{Modifier:} A Solidity feature used to wrap function logic with extra conditions, such as checking if a user is an admin before running a function.
+  \item \textbf{Event:} Used to notify external applications that something happened inside the contract.
+\end{itemize}
+
+Every code block provided in this report is annotated and explained, with the goal of making it understandable even for readers with no prior experience in smart contracts.
+
+We recommend thinking of the smart contract like a digital logbook with access permissions: certain users can write into it under strict conditions, and every entry is permanent and cannot be faked or deleted.
+
+\subsection{System Architecture Diagram}
+
+\begin{center}
+\begin{tikzpicture}[node distance=1.5cm]
+\node (start) [startstop] {User Account (Admin/Operator)};
+\node (checkRole) [decision, below of=start] {Is Admin?};
+\node (assign) [process, right of=checkRole, xshift=4cm] {Assign Role};
+\node (isOperator) [decision, below of=checkRole, yshift=-1cm] {Is Operator?};
+\node (quotaCheck) [process, below of=isOperator, yshift=-1cm] {Check Usage Quota};
+\node (log) [process, below of=quotaCheck] {Log Mission};
+\node (reject) [startstop, right of=quotaCheck, xshift=4cm] {Reject Transaction};
+\node (end) [startstop, below of=log] {Emit Event \\ Update State};
+
+\draw [arrow] (start) -- (checkRole);
+\draw [arrow] (checkRole) -- node[anchor=south] {Yes} (assign);
+\draw [arrow] (checkRole) -- node[anchor=west] {No} (isOperator);
+\draw [arrow] (isOperator) -- node[anchor=west] {Yes} (quotaCheck);
+\draw [arrow] (quotaCheck) -- (log);
+\draw [arrow] (log) -- (end);
+\draw [arrow] (isOperator.east) -- ++(2,0) node[midway, above] {No} -- (reject);
+\draw [arrow] (quotaCheck.east) -- ++(2,0) node[midway, above] {Limit Exceeded} -- (reject);
+\end{tikzpicture}
+\end{center}
+
+\subsection{Motivation and Purpose}
+
+To enhance system accountability and operational control, a smart contract was developed to manage permissions, log missions, and enforce usage limits for the self-stabilizing platform. The contract is designed for use in mission-critical maritime applications such as missile launching or firefighting, where equipment must be tightly controlled and every action transparently recorded.
+
+\subsection{Development Environment and Tools}
+
+The contract was implemented in \texttt{Solidity} and tested using the \texttt{Remix IDE}, a browser-based Ethereum development environment. All transactions and logic execution were validated using the \texttt{Remix VM (Prague)} local test blockchain.
+
+\subsection{Design Approach}
+
+The smart contract \texttt{PlatformManager} was developed iteratively, with each layer of functionality building upon the previous one. It includes:
+
+\begin{enumerate}
+    \item \textbf{Role-based Access Control}
+    \item \textbf{Mission Logging with Metadata}
+    \item \textbf{Daily Usage Quota Enforcement}
+\end{enumerate}
+
+Each of these stages is discussed with selected code examples below.
+
+\subsection{Role-Based Access Control}
+
+\begin{lstlisting}[style=solstyle, caption={Role definition and storage}]
+enum Role { None, Operator, Admin }
+mapping(address => Role) public roles;
+
+modifier onlyAdmin() {
+    require(roles[msg.sender] == Role.Admin, "Not admin");
+    _;
+}
+\end{lstlisting}
+Access control is a fundamental concept in both traditional and blockchain-based systems. In this smart contract, we implement a simple yet effective access control mechanism using an enumeration (enum) and a Solidity feature called a modifier.
+
+The enum named \texttt{Role} defines three possible user types: \texttt{None}, \texttt{Operator}, and \texttt{Admin}. By default, all users start with the \texttt{None} role, which means they are not authorized to perform sensitive actions.
+
+We use a \texttt{mapping} to associate each Ethereum address (which identifies a user) with one of these roles. For example, the contract deployer is automatically assigned the \texttt{Admin} role. This admin can then assign the \texttt{Operator} role to other users via the \texttt{assignRole} function.
+
+To enforce role-based permissions, we use a \texttt{modifier} called \texttt{onlyAdmin}. A modifier is a special construct in Solidity that can be attached to functions to restrict their usage. In this case, it ensures that only users with the \texttt{Admin} role can execute certain functions, such as assigning roles.
+
+The role-based access control setup in this contract helps to prevent unauthorized access and maintain the integrity of the system. It ensures that only trusted users can perform key actions like logging missions or configuring user roles, which is critical in a safety-critical application like a maritime stabilizing platform.
+
+
+\begin{lstlisting}[style=solstyle, caption={Assigning roles}]
+function assignRole(address _user, Role _role) external onlyAdmin {
+    roles[_user] = _role;
+    emit RoleAssigned(_user, _role);
+}
+\end{lstlisting}
+
+\subsection{Mission Logging and Event Emission}
+
+\begin{lstlisting}[style=solstyle, caption={Mission structure}]
+struct Mission {
+    address operator;
+    string deviceType;
+    uint timestamp;
+    string missionType;
+    bool success;
+}
+Mission[] public missions;
+\end{lstlisting}
+Mission logging is the core functionality of this smart contract. It enables the system to keep an immutable record of every operation performed by an authorized user (Operator). Each mission is represented as a structured data type called a \texttt{struct}, which groups related information under one name. In our case, the \texttt{Mission} struct contains details such as the operator's address, the device type used (e.g., missile launcher or water jet), the mission type (e.g., defense or firefighting), the time it was logged, and whether it was successful.
+
+These mission logs are stored in a dynamic array named \texttt{missions}, which grows automatically as new entries are added. Because this array is declared \texttt{public}, anyone can view the logged missions by querying the contract.
+
+To facilitate real-time interaction with external systems (such as a dashboard or monitoring tool), the contract emits an event named \texttt{MissionLogged} every time a new mission is added. Events in Solidity are special constructs that allow contracts to communicate with the outside world. Once emitted, an event can be detected and processed by a front-end application or a blockchain explorer, creating a bridge between blockchain logic and user interfaces.
+
+This mechanism provides a secure and transparent audit trail of all actions performed, making the contract suitable for critical applications where accountability and traceability are essential.
+
+\begin{lstlisting}[style=solstyle, caption={Logging a mission}]
+function logMission(
+    string memory _deviceType,
+    string memory _missionType,
+    bool _success
+) external onlyOperator checkUsageLimit {
+    missions.push(Mission(msg.sender, _deviceType, block.timestamp, _missionType, _success));
+    emit MissionLogged(msg.sender, _deviceType, _missionType, _success);
+}
+\end{lstlisting}
+
+\subsection{Usage Quota Enforcement}
+
+\begin{lstlisting}[style=solstyle, caption={Usage tracking state variables}]
+mapping(address => uint) public dailyUsage;
+mapping(address => uint) public lastUsageDay;
+\end{lstlisting}
+In mission-critical systems—especially those involving defense or emergency response—it is important to prevent overuse or abuse of the platform. To achieve this, the smart contract enforces a daily usage quota. This quota limits how many times a single Operator can log a mission within a 24-hour period.
+
+This feature is implemented using two \texttt{mapping} variables:
+\begin{itemize}
+    \item \texttt{dailyUsage}: Keeps track of how many missions a specific address (user) has logged today.
+    \item \texttt{lastUsageDay}: Records the last day (based on the current block timestamp) when the user logged a mission.
+\end{itemize}
+
+Before allowing a user to log a mission, the contract uses a \texttt{modifier} named \texttt{checkUsageLimit}. This modifier performs the following actions:
+\begin{enumerate}
+    \item It checks if the current blockchain day (based on dividing the current timestamp by the number of seconds in a day) is greater than the stored \texttt{lastUsageDay}. If so, it resets the user's daily usage count to zero.
+    \item It then verifies that the user has not exceeded the limit (in this case, 5 missions per day).
+    \item If the user is still within the limit, the mission is logged and the counter is incremented.
+    \item If the user has exceeded the quota, the transaction is rejected with a descriptive error message.
+\end{enumerate}
+
+This strategy ensures fair and regulated usage of the system, especially in collaborative or resource-limited environments. It also protects against accidental over-logging or potential misuse of operator access. The use of modifiers makes the logic reusable and keeps the contract code clean and readable.
+
+\begin{lstlisting}[style=solstyle, caption={Daily quota enforcement}]
+modifier checkUsageLimit() {
+    if (block.timestamp / 1 days > lastUsageDay[msg.sender]) {
+        dailyUsage[msg.sender] = 0;
+        lastUsageDay[msg.sender] = block.timestamp / 1 days;
+    }
+    require(dailyUsage[msg.sender] < 5, "Usage limit exceeded");
+    _;
+    dailyUsage[msg.sender]++;
+}
+\end{lstlisting}
+
+\subsection{Testing and Validation}
+
+\begin{enumerate}
+    \item Assigned the Operator role to a test account from the Admin account.
+    \item Logged five missions with valid parameters from the Operator account.
+    \item Verified that the sixth attempt was rejected due to quota limits.
+    \item Retrieved mission logs via \texttt{getMissions()} and confirmed correctness.
+\end{enumerate}
+
+\subsection{Impact and Applicability}
+
+The use of blockchain technology ensures that all mission operations are immutable, verifiable, and traceable in a decentralized environment. This model is particularly well suited for defense, safety, or logistics applications where trust, transparency, and limited authority are essential.
+
+\end{document}
